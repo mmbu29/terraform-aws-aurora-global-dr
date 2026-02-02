@@ -56,24 +56,6 @@ variable "db_master_password" {
   sensitive   = true
 }
 
-# Identifies the logical grouping of subnets in us-east-1 where the primary cluster will reside
-variable "db_subnet_group_name" {
-  description = "DB subnet group name for the primary Aurora cluster"
-  type        = string
-}
-
-# References the firewall rules (Security Group) that protect the primary cluster
-variable "db_security_group_id" {
-  description = "Security group ID for the primary Aurora cluster"
-  type        = string
-}
-
-# Provides the Amazon Resource Name (ARN) for the encryption key used in the primary region
-variable "kms_key_id" {
-  description = "KMS key ARN for the primary Aurora cluster"
-  type        = string
-}
-
 # --- Secondary Region Configuration (us-west-1) ---
 # Specifies the subnet group name within the us-west-1 network for the replica cluster
 variable "secondary_db_subnet_group_name" {
@@ -84,11 +66,5 @@ variable "secondary_db_subnet_group_name" {
 # References the specific security group protecting the database in the us-west-1 region
 variable "secondary_db_security_group_id" {
   description = "Security group ID for the secondary Aurora cluster"
-  type        = string
-}
-
-# Provides the ARN for the us-west-1 specific KMS key to ensure data remains encrypted in the secondary region
-variable "secondary_kms_key_id" {
-  description = "KMS key ARN for the secondary Aurora cluster"
   type        = string
 }
