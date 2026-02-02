@@ -6,7 +6,7 @@ on:
   pull_request:
 
 permissions:
-  id-token: write        # Required for OIDC
+  id-token: write
   contents: read
 
 jobs:
@@ -14,41 +14,46 @@ jobs:
     name: 'Terraform'
     runs-on: ubuntu-latest
 
+    env:
+      AWS_REGION: us-east-1
+      AWS_DEFAULT_REGION: us-east-1
+
+      TF_VAR_db_master_password: ${{ secrets.DB_MASTER_PASSWORD }}
+      TF_VAR_primary_db_subnet_group_name: ${{ secrets.PRIMARY_DB_SUBNET_GROUP_NAME }}
+      TF_VAR_secondary_db_subnet_group_name: ${{ secrets.SECONDARY_DB_SUBNET_GROUP_NAME }}
+
     defaults:
       run:
         shell: bash
 
     steps:
-    - name: Checkout
-      uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    - name: Configure AWS credentials (OIDC)
-      uses: aws-actions/configure-aws-credentials@v4
-      with:
-        role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
-        aws-region: us-east-1
+      - name: Configure AWS Credentials (OIDC)
+        if: ${{ secrets.AWS_OIDC_ROLE_ARN != '' }}
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
+          aws-region: us-east-1
 
-    - name: Setup Terraform
-      uses: hashicorp/setup-terraform@v3
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
 
-    - name: Terraform Init
-      run: terraform init
+      - name: Terraform Init
+        run: terraform init
 
-    - name: Terraform Plan
-      run: |
-        terraform plan -input=false \
-          -var="db_master_username=${{ secrets.DB_USERNAME }}" \
-          -var="db_master_password=${{ secrets.DB_PASSWORD }}" \
-          -var="secondary_db_security_group_id=${{ secrets.SEC_SG_ID }}" \
-          -var="secondary_private_subnet_1_id=${{ secrets.SEC_SUBNET_1 }}" \
-          -var="secondary_private_subnet_2_id=${{ secrets.SEC_SUBNET_2 }}"
+      - name: Terraform Validate
+        run: terraform validate
 
-    - name: Terraform Apply
-      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-      run: |
-        terraform apply -auto-approve -input=false \
-          -var="db_master_username=${{ secrets.DB_USERNAME }}" \
-          -var="db_master_password=${{ secrets.DB_PASSWORD }}" \
-          -var="secondary_db_security_group_id=${{ secrets.SEC_SG_ID }}" \
-          -var="secondary_private_subnet_1_id=${{ secrets.SEC_SUBNET_1 }}" \
-          -var="secondary_private_subnet_2_id=${{ secrets.SEC_SUBNET_2 }}"
+      - name: Terraform Plan
+        run: terraform plan -input=false
+
+      - name: Terraform Apply
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: terraform apply -auto-approve -input=false
+        
+
+        
