@@ -350,6 +350,17 @@ resource "aws_rds_cluster_instance" "primary_writer" {
   publicly_accessible             = false
 }
 
+# This creates the missing subnet group in us-west-1
+resource "aws_db_subnet_group" "secondary_subnet_group" {
+  provider   = aws.secondary # Crucial: tells Terraform to talk to us-west-1
+  name       = "labdb-subnet-group-us-west-1"
+  subnet_ids = [aws_subnet.secondary_private_1.id, aws_subnet.secondary_private_2.id]
+
+  tags = {
+    Name = "labdb-subnet-group-us-west-1"
+  }
+}
+
 # Provisions the Secondary Aurora Cluster in US-West-1 to serve as a high-speed Read Replica and Disaster Recovery target
 resource "aws_rds_cluster" "secondary_cluster" {
   provider                  = aws.us_west_1
@@ -358,17 +369,22 @@ resource "aws_rds_cluster" "secondary_cluster" {
   engine                    = aws_rds_global_cluster.lab_db_global.engine
   engine_version            = aws_rds_global_cluster.lab_db_global.engine_version
 
-  db_subnet_group_name   = var.secondary_db_subnet_group_name
+  # FIX: Change this from the variable to the actual resource name
+  db_subnet_group_name = aws_db_subnet_group.secondary_subnet_group.name
+
   vpc_security_group_ids = [var.secondary_db_security_group_id]
 
   storage_encrypted       = true
-  kms_key_id              = aws_kms_key.secondary_kms.arn # Points to your us-west-1 KMS Key
+  kms_key_id              = aws_kms_key.secondary_kms.arn
   backup_retention_period = 7
 
   skip_final_snapshot = true
 
-  # Crucial: Cluster creation depends on the primary writer being ready
-  depends_on = [aws_rds_cluster_instance.primary_writer]
+  # Crucial: Cluster creation depends on the primary writer AND the secondary subnet group
+  depends_on = [
+    aws_rds_cluster_instance.primary_writer,
+    aws_db_subnet_group.secondary_subnet_group
+  ]
 }
 
 # Provisions a Reader Instance in the secondary region to handle local read traffic and provide redundancy
