@@ -144,6 +144,7 @@ resource "aws_kms_key" "aurora_kms" {
   deletion_window_in_days = 7
   enable_key_rotation     = true
 
+
   # This policy allows both your IAM user AND the RDS service to use the key
   policy = jsonencode({
     Version = "2012-10-17",
@@ -336,6 +337,7 @@ resource "aws_kms_key" "aurora_kms" {
   description             = "KMS key for Aurora Global Database"
   deletion_window_in_days = 7
   enable_key_rotation     = true
+  policy                  = data.aws_iam_policy_document.aurora_kms_policy.json
 }
 
 # Configures the provider alias for the US East (N. Virginia) region
@@ -386,6 +388,46 @@ resource "aws_rds_cluster_instance" "secondary_reader" {
   publicly_accessible             = false
 }
 
+# Gets your AWS Account ID automatically
+data "aws_caller_identity" "current" {}
+
+data "aws_iam_policy_document" "aurora_kms_policy" {
+  # Statement 1: Standard IAM user/Root access to manage the key
+  statement {
+    sid       = "Enable IAM User Permissions"
+    effect    = "Allow"
+    actions   = ["kms:*"]
+    resources = ["*"]
+
+    principals {
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
+    }
+  }
+
+  # Statement 2: Grant RDS and CloudWatch access
+  statement {
+    sid    = "Allow RDS and CloudWatch to use the key"
+    effect = "Allow"
+    actions = [
+      "kms:Encrypt",
+      "kms:Decrypt",
+      "kms:ReEncrypt*",
+      "kms:GenerateDataKey*",
+      "kms:DescribeKey"
+    ]
+    resources = ["*"]
+
+    principals {
+      type = "Service"
+      identifiers = [
+        "rds.amazonaws.com",
+        "logs.us-east-1.amazonaws.com",
+        "logs.us-west-1.amazonaws.com"
+      ]
+    }
+  }
+}
 
 # Fully isolated VPC with Flow Logs for security auditing
 # Multi-layer encryption using AWS KMS (Storage and Performance Insights)
