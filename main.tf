@@ -317,7 +317,7 @@ resource "aws_rds_cluster_instance" "primary_writer" {
   identifier         = "lab-db-two-us-east-1"
   cluster_identifier = aws_rds_cluster.primary_cluster.id
 
-  instance_class                  = "db.t3.medium"
+  instance_class                  = "db.r5.large"
   engine                          = "aurora-postgresql"
   engine_version                  = "15.8"
   performance_insights_enabled    = true
@@ -371,7 +371,7 @@ resource "aws_rds_cluster_instance" "secondary_reader" {
   provider           = aws.us_west_1
   identifier         = "lab-db-one-us-west-1"
   cluster_identifier = aws_rds_cluster.secondary_cluster.id
-  instance_class     = "db.t3.medium"
+  instance_class     = "db.r5.large"
   engine             = "aurora-postgresql"
   engine_version     = "15.8"
 
