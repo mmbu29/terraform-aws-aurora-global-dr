@@ -1,16 +1,10 @@
-# AWS Configuration
-aws_region  = "us-east-1"
-environment = "lab"
+# terraform.tfvars
 
-# Network Configuration
-vpc_cidr              = "10.0.0.0/16"
-private_subnet_1_cidr = "10.0.1.0/24"
-private_subnet_2_cidr = "10.0.2.0/24"
+# Primary Region Credentials
+db_master_username = "your_admin_name"
+db_master_password = "your_secure_password123"
 
-# Database Credentials
-db_master_password = "11Pgadmin"
-
-# Secondary Region Configuration (us-west-1)
-# Note: You only need these if you are referencing existing resources in the secondary region
-secondary_db_subnet_group_name = "labdb-subnet-group-us-west-1"
-secondary_db_security_group_id = "sg-0abc1234def567890"
+# Secondary Region (us-west-1) - GO TO AWS CONSOLE TO GET THESE
+secondary_private_subnet_1_id  = "subnet-0db788bd35aa16a02"
+secondary_private_subnet_2_id  = "subnet-000b58aee2757c122"
+secondary_db_security_group_id = "sg-0f097e293da56624c"
