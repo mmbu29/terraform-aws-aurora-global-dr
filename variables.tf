@@ -68,3 +68,15 @@ variable "secondary_db_security_group_id" {
   description = "Security group ID for the secondary Aurora cluster"
   type        = string
 }
+
+# References the first private subnet ID in the secondary region (us-west-1)
+variable "secondary_private_subnet_1_id" {
+  description = "Private subnet 1 ID for the secondary Aurora cluster"
+  type        = string
+}
+
+# References the second private subnet ID in the secondary region (us-west-1)
+variable "secondary_private_subnet_2_id" {
+  description = "Private subnet 2 ID for the secondary Aurora cluster"
+  type        = string
+}

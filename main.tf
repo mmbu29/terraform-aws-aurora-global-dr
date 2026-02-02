@@ -352,9 +352,10 @@ resource "aws_rds_cluster_instance" "primary_writer" {
 
 # This creates the missing subnet group in us-west-1
 resource "aws_db_subnet_group" "secondary_subnet_group" {
-  provider   = aws.secondary # Crucial: tells Terraform to talk to us-west-1
-  name       = "labdb-subnet-group-us-west-1"
-  subnet_ids = [aws_subnet.secondary_private_1.id, aws_subnet.secondary_private_2.id]
+  provider = aws.us_west_1 # Corrected to match alias
+  name     = "labdb-subnet-group-us-west-1"
+  # Use variables for secondary subnets since they aren't in the primary VPC
+  subnet_ids = [var.secondary_private_subnet_1_id, var.secondary_private_subnet_2_id]
 
   tags = {
     Name = "labdb-subnet-group-us-west-1"
@@ -369,7 +370,7 @@ resource "aws_rds_cluster" "secondary_cluster" {
   engine                    = aws_rds_global_cluster.lab_db_global.engine
   engine_version            = aws_rds_global_cluster.lab_db_global.engine_version
 
-  # FIX: Change this from the variable to the actual resource name
+  # FIX: Reference the resource name to ensure creation order
   db_subnet_group_name = aws_db_subnet_group.secondary_subnet_group.name
 
   vpc_security_group_ids = [var.secondary_db_security_group_id]
@@ -401,8 +402,4 @@ resource "aws_rds_cluster_instance" "secondary_reader" {
   publicly_accessible             = false
 }
 
-# Fully isolated VPC with Flow Logs for security auditing
-# Multi-layer encryption using AWS KMS (Storage and Performance Insights)
-# Aurora PostgreSQL 15.8 Global Cluster with cross-region replication for < 1-second latency reads in the secondary region.
-# Secure access via tightly scoped Security Groups allowing only necessary traffic
-# Automated failover capabilities and a 7-day backup retention policy
+
