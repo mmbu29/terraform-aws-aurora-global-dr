@@ -46,7 +46,7 @@ variable "public_subnet_cidr" {
 variable "db_master_username" {
   description = "Master username for the Aurora PostgreSQL cluster"
   type        = string
-  default     = "marcellus"
+  sensitive   = true
 }
 
 # Sets the sensitive administrative password; marked as sensitive to prevent logging in the console
@@ -54,13 +54,6 @@ variable "db_master_password" {
   description = "Master password for Aurora database"
   type        = string
   sensitive   = true
-}
-
-# --- Secondary Region Configuration (us-west-1) ---
-# Specifies the subnet group name within the us-west-1 network for the replica cluster
-variable "secondary_db_subnet_group_name" {
-  description = "DB subnet group name for the secondary Aurora cluster"
-  type        = string
 }
 
 # References the specific security group protecting the database in the us-west-1 region

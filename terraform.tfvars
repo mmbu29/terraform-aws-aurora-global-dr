@@ -1,8 +1,8 @@
 # terraform.tfvars
 
 # Primary Region Credentials
-db_master_username = "your_admin_name"
-db_master_password = "your_secure_password123"
+db_master_username = "marcellus"
+db_master_password = "11Pgadmin"
 
 # Secondary Region (us-west-1) - GO TO AWS CONSOLE TO GET THESE
 secondary_private_subnet_1_id  = "subnet-0db788bd35aa16a02"
