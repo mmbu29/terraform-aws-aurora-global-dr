@@ -35,7 +35,7 @@ variable "private_subnet_2_cidr" {
   default     = "10.0.2.0/24"
 }
 
-# Defines the IP range for the second private subnet to ensure cross-AZ redundancy
+# Defines the IP range for the public subnet
 variable "public_subnet_cidr" {
   description = "CIDR block for public subnet"
   type        = string
@@ -56,6 +56,8 @@ variable "db_master_password" {
   sensitive   = true
 }
 
+# --- Secondary Region Configuration (us-west-1) ---
+
 # References the specific security group protecting the database in the us-west-1 region
 variable "secondary_db_security_group_id" {
   description = "Security group ID for the secondary Aurora cluster"
@@ -73,3 +75,6 @@ variable "secondary_private_subnet_2_id" {
   description = "Private subnet 2 ID for the secondary Aurora cluster"
   type        = string
 }
+
+# Note: 'secondary_db_subnet_group_name' has been deleted because 
+# it is now handled via direct resource reference in main.tf.
