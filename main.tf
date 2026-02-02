@@ -139,30 +139,36 @@ resource "aws_db_subnet_group" "lab_db_subnet_group" {
 }
 
 # Creates a Customer Managed Key (CMK) for the specific purpose of encrypting VPC network traffic logs
-resource "aws_kms_key" "vpc_logs_key" {
-  description             = "KMS key for encrypting VPC Flow Logs"
-  deletion_window_in_days = 10
+resource "aws_kms_key" "aurora_kms" {
+  description             = "KMS key for Aurora Global Database"
+  deletion_window_in_days = 7
   enable_key_rotation     = true
+
+  # This policy allows both your IAM user AND the RDS service to use the key
   policy = jsonencode({
     Version = "2012-10-17",
     Statement = [
       {
-        Sid       = "Enable IAM User Permissions",
-        Effect    = "Allow",
-        Principal = { AWS = "arn:aws:iam::590183777783:root" },
-        Action    = "kms:*",
-        Resource  = "*"
+        Sid    = "Enable IAM User Permissions",
+        Effect = "Allow",
+        Principal = {
+          AWS = "arn:aws:iam::590183777783:root" # Your Account ID
+        },
+        Action   = "kms:*",
+        Resource = "*"
       },
       {
-        Sid       = "Allow CloudWatch Logs",
-        Effect    = "Allow",
-        Principal = { Service = "logs.us-east-1.amazonaws.com" },
+        Sid    = "Allow RDS to use the key",
+        Effect = "Allow",
+        Principal = {
+          Service = "rds.amazonaws.com"
+        },
         Action = [
-          "kms:Encrypt*",
-          "kms:Decrypt*",
+          "kms:Encrypt",
+          "kms:Decrypt",
           "kms:ReEncrypt*",
           "kms:GenerateDataKey*",
-          "kms:Describe*"
+          "kms:DescribeKey"
         ],
         Resource = "*"
       }
