@@ -23,11 +23,25 @@ provider "aws" {
   region = var.aws_region
 }
 
+# Configures the provider alias for the US East (N. Virginia) region
+provider "aws" {
+  alias  = "us_east_1"
+  region = "us-east-1"
+}
+
+# If you are adding the secondary region, you need this too
+provider "aws" {
+  alias  = "us_west_1"
+  region = "us-west-1"
+}
 
 # Data source to get available AZs
 data "aws_availability_zones" "available" {
   state = "available"
 }
+
+# Gets your AWS Account ID automatically
+data "aws_caller_identity" "current" {}
 
 # --- Phase 1: VPC and Networking Prerequisites ---
 # VPC
@@ -53,13 +67,12 @@ resource "aws_subnet" "public_subnet_one" {
   vpc_id                  = aws_vpc.lab_vpc.id
   cidr_block              = var.public_subnet_cidr
   availability_zone       = data.aws_availability_zones.available.names[0]
-  map_public_ip_on_launch = false # Changed from true to false
+  map_public_ip_on_launch = false
 
   tags = {
     Name = "${var.environment}-public-subnet-one"
   }
 }
-
 
 # Establishes a route table to manage traffic flow for public-facing resources
 resource "aws_route_table" "public_rt" {
@@ -138,50 +151,64 @@ resource "aws_db_subnet_group" "lab_db_subnet_group" {
   }
 }
 
-# Creates a Customer Managed Key (CMK) for the specific purpose of encrypting VPC network traffic logs
-resource "aws_kms_key" "aurora_kms" {
-  description             = "KMS key for Aurora Global Database"
+# Centralized KMS Policy Document
+data "aws_iam_policy_document" "aurora_kms_policy" {
+  statement {
+    sid       = "Enable IAM User Permissions"
+    effect    = "Allow"
+    actions   = ["kms:*"]
+    resources = ["*"]
+    principals {
+      type        = "AWS"
+      identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
+    }
+  }
+
+  statement {
+    sid    = "Allow RDS and CloudWatch to use the key"
+    effect = "Allow"
+    actions = [
+      "kms:Encrypt",
+      "kms:Decrypt",
+      "kms:ReEncrypt*",
+      "kms:GenerateDataKey*",
+      "kms:DescribeKey"
+    ]
+    resources = ["*"]
+    principals {
+      type = "Service"
+      identifiers = [
+        "rds.amazonaws.com",
+        "logs.us-east-1.amazonaws.com",
+        "logs.us-west-1.amazonaws.com"
+      ]
+    }
+  }
+}
+
+# Provisions a Customer Managed Key (CMK) for Primary Region
+resource "aws_kms_key" "primary_kms" {
+  provider                = aws.us_east_1
+  description             = "KMS key for Aurora Primary - us-east-1"
   deletion_window_in_days = 7
   enable_key_rotation     = true
+  policy                  = data.aws_iam_policy_document.aurora_kms_policy.json
+}
 
-
-  # This policy allows both your IAM user AND the RDS service to use the key
-  policy = jsonencode({
-    Version = "2012-10-17",
-    Statement = [
-      {
-        Sid    = "Enable IAM User Permissions",
-        Effect = "Allow",
-        Principal = {
-          AWS = "arn:aws:iam::590183777783:root" # Your Account ID
-        },
-        Action   = "kms:*",
-        Resource = "*"
-      },
-      {
-        Sid    = "Allow RDS to use the key",
-        Effect = "Allow",
-        Principal = {
-          Service = "rds.amazonaws.com"
-        },
-        Action = [
-          "kms:Encrypt",
-          "kms:Decrypt",
-          "kms:ReEncrypt*",
-          "kms:GenerateDataKey*",
-          "kms:DescribeKey"
-        ],
-        Resource = "*"
-      }
-    ]
-  })
+# Provisions a dedicated KMS Customer Managed Key for Secondary Region
+resource "aws_kms_key" "secondary_kms" {
+  provider                = aws.us_west_1
+  description             = "KMS key for Aurora Secondary - us-west-1"
+  deletion_window_in_days = 7
+  enable_key_rotation     = true
+  policy                  = data.aws_iam_policy_document.aurora_kms_policy.json
 }
 
 # Provisions a CloudWatch Log Group to serve as the destination for VPC Flow Logs
 resource "aws_cloudwatch_log_group" "vpc_logs" {
   name              = "/aws/vpc/flowlogs"
   retention_in_days = 14
-  kms_key_id        = aws_kms_key.vpc_logs_key.arn
+  kms_key_id        = aws_kms_key.primary_kms.arn
 }
 
 # Defines an IAM Role that allows the VPC Flow Logs service to assume permissions to write to CloudWatch
@@ -234,7 +261,7 @@ resource "aws_security_group" "db_sec_grp" {
   description = "Security Group for Aurora, allowing PostgreSQL access (5432) from within the VPC"
   vpc_id      = aws_vpc.lab_vpc.id
 
-  # Ingress rule: Allow PostgreSQL port 5432 from the entire VPC CIDR (10.0.0.0/15)
+  # Ingress rule: Allow PostgreSQL port 5432 from the entire VPC CIDR
   ingress {
     from_port   = 5432
     to_port     = 5432
@@ -248,10 +275,9 @@ resource "aws_security_group" "db_sec_grp" {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["10.0.0.0/15"] # Replace with your internal network range
-    description = "Allow outbound traffic within VPC"
+    cidr_blocks = [var.vpc_cidr]
+    description = "Allow outbound traffic only within VPC"
   }
-
 
   tags = {
     Name = "DBsecGRP"
@@ -264,12 +290,6 @@ resource "aws_rds_cluster_parameter_group" "lab_clu_param_grp" {
   family      = "aurora-postgresql15" # Defines the engine and version (Aurora PostgreSQL 15)
   description = "Custom Cluster Parameter Group for Aurora PostgreSQL 15"
 
-  # Example parameter setting: You can add custom settings here if needed
-  # parameter {
-  #   name  = "log_statement"
-  #   value = "none"
-  # }
-
   tags = {
     Name = "lab-clu-param-grp-aupg-15"
   }
@@ -277,14 +297,12 @@ resource "aws_rds_cluster_parameter_group" "lab_clu_param_grp" {
 
 # 11. Aurora DB Instance Parameter Group - NEW RESOURCE
 resource "aws_db_parameter_group" "lab_db_param_grp" {
-  name        = "lab-clu-param-grp-aupg-15"
+  name        = "lab-db-param-grp-aupg-15"
   family      = "aurora-postgresql15" # Must match the cluster family
   description = "Custom DB Instance Parameter Group for Aurora PostgreSQL 15"
 
-  # Add custom instance-level parameters here if needed
-
   tags = {
-    Name = "lab-clu-param-grp-aupg-15"
+    Name = "lab-db-param-grp-aupg-15"
   }
 }
 
@@ -301,8 +319,8 @@ resource "aws_rds_cluster" "primary_cluster" {
   provider                  = aws.us_east_1
   cluster_identifier        = "lab-db-global-cluster-1"
   global_cluster_identifier = aws_rds_global_cluster.lab_db_global.id
-  engine                    = "aurora-postgresql"
-  engine_version            = "15.8"
+  engine                    = aws_rds_global_cluster.lab_db_global.engine
+  engine_version            = aws_rds_global_cluster.lab_db_global.engine_version
 
   master_username = var.db_master_username
   master_password = var.db_master_password
@@ -312,7 +330,7 @@ resource "aws_rds_cluster" "primary_cluster" {
   vpc_security_group_ids = [aws_security_group.db_sec_grp.id]
 
   storage_encrypted = true
-  kms_key_id        = aws_kms_key.aurora_kms.arn # Points to your us-east-1 KMS Key
+  kms_key_id        = aws_kms_key.primary_kms.arn # Points to your us-east-1 KMS Key
 
   backup_retention_period = 7
   skip_final_snapshot     = true
@@ -325,32 +343,11 @@ resource "aws_rds_cluster_instance" "primary_writer" {
   cluster_identifier = aws_rds_cluster.primary_cluster.id
 
   instance_class                  = "db.r5.large"
-  engine                          = "aurora-postgresql"
-  engine_version                  = "15.8"
+  engine                          = aws_rds_cluster.primary_cluster.engine
+  engine_version                  = aws_rds_cluster.primary_cluster.engine_version
   performance_insights_enabled    = true
-  performance_insights_kms_key_id = var.kms_key_id
+  performance_insights_kms_key_id = aws_kms_key.primary_kms.arn
   publicly_accessible             = false
-}
-
-# Provisions a dedicated KMS Customer Managed Key to encrypt database storage at rest
-resource "aws_kms_key" "aurora_kms" {
-  description             = "KMS key for Aurora Global Database"
-  deletion_window_in_days = 7
-  enable_key_rotation     = true
-  policy                  = data.aws_iam_policy_document.aurora_kms_policy.json
-}
-
-# Configures the provider alias for the US East (N. Virginia) region
-# This block MUST match what is in your state file
-provider "aws" {
-  alias  = "us_east_1"
-  region = "us-east-1"
-}
-
-# If you are adding the secondary region, you need this too
-provider "aws" {
-  alias  = "us_west_1"
-  region = "us-west-1"
 }
 
 # Provisions the Secondary Aurora Cluster in US-West-1 to serve as a high-speed Read Replica and Disaster Recovery target
@@ -358,14 +355,14 @@ resource "aws_rds_cluster" "secondary_cluster" {
   provider                  = aws.us_west_1
   cluster_identifier        = "lab-db-us-west-1"
   global_cluster_identifier = aws_rds_global_cluster.lab_db_global.id
-  engine                    = "aurora-postgresql"
-  engine_version            = "15.8"
+  engine                    = aws_rds_global_cluster.lab_db_global.engine
+  engine_version            = aws_rds_global_cluster.lab_db_global.engine_version
 
   db_subnet_group_name   = var.secondary_db_subnet_group_name
   vpc_security_group_ids = [var.secondary_db_security_group_id]
 
   storage_encrypted       = true
-  kms_key_id              = var.secondary_kms_key_id # Points to your us-west-1 KMS Key
+  kms_key_id              = aws_kms_key.secondary_kms.arn # Points to your us-west-1 KMS Key
   backup_retention_period = 7
 
   skip_final_snapshot = true
@@ -380,53 +377,12 @@ resource "aws_rds_cluster_instance" "secondary_reader" {
   identifier         = "lab-db-one-us-west-1"
   cluster_identifier = aws_rds_cluster.secondary_cluster.id
   instance_class     = "db.r5.large"
-  engine             = "aurora-postgresql"
-  engine_version     = "15.8"
+  engine             = aws_rds_cluster.secondary_cluster.engine
+  engine_version     = aws_rds_cluster.secondary_cluster.engine_version
 
   performance_insights_enabled    = true
-  performance_insights_kms_key_id = var.secondary_kms_key_id
+  performance_insights_kms_key_id = aws_kms_key.secondary_kms.arn
   publicly_accessible             = false
-}
-
-# Gets your AWS Account ID automatically
-data "aws_caller_identity" "current" {}
-
-data "aws_iam_policy_document" "aurora_kms_policy" {
-  # Statement 1: Standard IAM user/Root access to manage the key
-  statement {
-    sid       = "Enable IAM User Permissions"
-    effect    = "Allow"
-    actions   = ["kms:*"]
-    resources = ["*"]
-
-    principals {
-      type        = "AWS"
-      identifiers = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"]
-    }
-  }
-
-  # Statement 2: Grant RDS and CloudWatch access
-  statement {
-    sid    = "Allow RDS and CloudWatch to use the key"
-    effect = "Allow"
-    actions = [
-      "kms:Encrypt",
-      "kms:Decrypt",
-      "kms:ReEncrypt*",
-      "kms:GenerateDataKey*",
-      "kms:DescribeKey"
-    ]
-    resources = ["*"]
-
-    principals {
-      type = "Service"
-      identifiers = [
-        "rds.amazonaws.com",
-        "logs.us-east-1.amazonaws.com",
-        "logs.us-west-1.amazonaws.com"
-      ]
-    }
-  }
 }
 
 # Fully isolated VPC with Flow Logs for security auditing
