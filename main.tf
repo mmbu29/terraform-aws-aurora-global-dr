@@ -143,13 +143,38 @@ resource "aws_kms_key" "vpc_logs_key" {
   description             = "KMS key for encrypting VPC Flow Logs"
   deletion_window_in_days = 10
   enable_key_rotation     = true
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Sid       = "Enable IAM User Permissions",
+        Effect    = "Allow",
+        Principal = { AWS = "arn:aws:iam::590183777783:root" },
+        Action    = "kms:*",
+        Resource  = "*"
+      },
+      {
+        Sid       = "Allow CloudWatch Logs",
+        Effect    = "Allow",
+        Principal = { Service = "logs.us-east-1.amazonaws.com" },
+        Action = [
+          "kms:Encrypt*",
+          "kms:Decrypt*",
+          "kms:ReEncrypt*",
+          "kms:GenerateDataKey*",
+          "kms:Describe*"
+        ],
+        Resource = "*"
+      }
+    ]
+  })
 }
 
 # Provisions a CloudWatch Log Group to serve as the destination for VPC Flow Logs
 resource "aws_cloudwatch_log_group" "vpc_logs" {
   name              = "/aws/vpc/flowlogs"
   retention_in_days = 14
-  # kms_key_id        = aws_kms_key.vpc_logs_key.arn
+  kms_key_id        = aws_kms_key.vpc_logs_key.arn
 }
 
 # Defines an IAM Role that allows the VPC Flow Logs service to assume permissions to write to CloudWatch
@@ -202,7 +227,7 @@ resource "aws_security_group" "db_sec_grp" {
   description = "Security Group for Aurora, allowing PostgreSQL access (5432) from within the VPC"
   vpc_id      = aws_vpc.lab_vpc.id
 
-  # Ingress rule: Allow PostgreSQL port 5432 from the entire VPC CIDR (10.0.0.0/16)
+  # Ingress rule: Allow PostgreSQL port 5432 from the entire VPC CIDR (10.0.0.0/15)
   ingress {
     from_port   = 5432
     to_port     = 5432
@@ -216,7 +241,7 @@ resource "aws_security_group" "db_sec_grp" {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
-    cidr_blocks = ["10.0.0.0/16"] # Replace with your internal network range
+    cidr_blocks = ["10.0.0.0/15"] # Replace with your internal network range
     description = "Allow outbound traffic within VPC"
   }
 
@@ -228,9 +253,9 @@ resource "aws_security_group" "db_sec_grp" {
 
 # 10. Aurora Cluster Parameter Group - NEW RESOURCE
 resource "aws_rds_cluster_parameter_group" "lab_clu_param_grp" {
-  name        = "lab-clu-param-grp-aupg-16"
-  family      = "aurora-postgresql16" # Defines the engine and version (Aurora PostgreSQL 16)
-  description = "Custom Cluster Parameter Group for Aurora PostgreSQL 16"
+  name        = "lab-clu-param-grp-aupg-15"
+  family      = "aurora-postgresql15" # Defines the engine and version (Aurora PostgreSQL 15)
+  description = "Custom Cluster Parameter Group for Aurora PostgreSQL 15"
 
   # Example parameter setting: You can add custom settings here if needed
   # parameter {
@@ -239,20 +264,20 @@ resource "aws_rds_cluster_parameter_group" "lab_clu_param_grp" {
   # }
 
   tags = {
-    Name = "lab-clu-param-grp-aupg-16"
+    Name = "lab-clu-param-grp-aupg-15"
   }
 }
 
 # 11. Aurora DB Instance Parameter Group - NEW RESOURCE
 resource "aws_db_parameter_group" "lab_db_param_grp" {
-  name        = "lab-clu-param-grp-aupg-16"
-  family      = "aurora-postgresql16" # Must match the cluster family
-  description = "Custom DB Instance Parameter Group for Aurora PostgreSQL 16"
+  name        = "lab-clu-param-grp-aupg-15"
+  family      = "aurora-postgresql15" # Must match the cluster family
+  description = "Custom DB Instance Parameter Group for Aurora PostgreSQL 15"
 
   # Add custom instance-level parameters here if needed
 
   tags = {
-    Name = "lab-clu-param-grp-aupg-16"
+    Name = "lab-clu-param-grp-aupg-15"
   }
 }
 
