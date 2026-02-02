@@ -149,7 +149,7 @@ resource "aws_kms_key" "vpc_logs_key" {
 resource "aws_cloudwatch_log_group" "vpc_logs" {
   name              = "/aws/vpc/flowlogs"
   retention_in_days = 14
-  kms_key_id        = aws_kms_key.vpc_logs_key.arn
+  # kms_key_id        = aws_kms_key.vpc_logs_key.arn
 }
 
 # Defines an IAM Role that allows the VPC Flow Logs service to assume permissions to write to CloudWatch
@@ -260,7 +260,7 @@ resource "aws_db_parameter_group" "lab_db_param_grp" {
 resource "aws_rds_global_cluster" "lab_db_global" {
   global_cluster_identifier = "lab-db-cluster"
   engine                    = "aurora-postgresql"
-  engine_version            = "16.0"
+  engine_version            = "15.4"
   storage_encrypted         = true
 }
 
@@ -270,7 +270,7 @@ resource "aws_rds_cluster" "primary_cluster" {
   cluster_identifier        = "lab-db-global-cluster-1"
   global_cluster_identifier = aws_rds_global_cluster.lab_db_global.id
   engine                    = "aurora-postgresql"
-  engine_version            = "16"
+  engine_version            = "15.4"
 
   master_username = var.db_master_username
   master_password = var.db_master_password
@@ -294,7 +294,7 @@ resource "aws_rds_cluster_instance" "primary_writer" {
 
   instance_class                  = "db.t3.medium"
   engine                          = "aurora-postgresql"
-  engine_version                  = "16"
+  engine_version                  = "15.4"
   performance_insights_enabled    = true
   performance_insights_kms_key_id = var.kms_key_id
   publicly_accessible             = false
@@ -326,7 +326,7 @@ resource "aws_rds_cluster" "secondary_cluster" {
   cluster_identifier        = "lab-db-us-west-1"
   global_cluster_identifier = aws_rds_global_cluster.lab_db_global.id
   engine                    = "aurora-postgresql"
-  engine_version            = "16"
+  engine_version            = "15.4"
 
   db_subnet_group_name   = var.secondary_db_subnet_group_name
   vpc_security_group_ids = [var.secondary_db_security_group_id]
@@ -348,7 +348,7 @@ resource "aws_rds_cluster_instance" "secondary_reader" {
   cluster_identifier = aws_rds_cluster.secondary_cluster.id
   instance_class     = "db.t3.medium"
   engine             = "aurora-postgresql"
-  engine_version     = "16"
+  engine_version     = "15.4"
 
   performance_insights_enabled    = true
   performance_insights_kms_key_id = var.secondary_kms_key_id
@@ -358,6 +358,6 @@ resource "aws_rds_cluster_instance" "secondary_reader" {
 
 # Fully isolated VPC with Flow Logs for security auditing
 # Multi-layer encryption using AWS KMS (Storage and Performance Insights)
-# Aurora PostgreSQL 16 Global Cluster with cross-region replication for < 1-second latency reads in the secondary region.
+# Aurora PostgreSQL 15.4 Global Cluster with cross-region replication for < 1-second latency reads in the secondary region.
 # Secure access via tightly scoped Security Groups allowing only necessary traffic
 # Automated failover capabilities and a 7-day backup retention policy
