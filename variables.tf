@@ -1,80 +1,104 @@
-
-# --- AWS Configuration ---
-# Defines the primary geographical location where the regional AWS resources will be provisioned
+# --- Region & Environment ---
 variable "aws_region" {
-  description = "AWS region to deploy resources"
+  description = "The primary region for resources (East)"
   type        = string
   default     = "us-east-1"
 }
 
-# Sets a naming prefix to distinguish between different stages like 'lab', 'dev', or 'prod'
 variable "environment" {
-  description = "Environment name"
+  description = "Name of the environment for tagging"
   type        = string
-  default     = "lab"
+  default     = "aurora-dr-lab"
 }
 
-# Specifies the IP address range for the Virtual Private Cloud (VPC) network
+# --- Networking (East) ---
 variable "vpc_cidr" {
-  description = "CIDR block for VPC"
+  description = "CIDR block for the East VPC"
   type        = string
   default     = "10.0.0.0/16"
 }
 
-# Defines the IP range for the first private subnet, typically used for database high availability
-variable "private_subnet_1_cidr" {
-  description = "CIDR block for private subnet 1"
+variable "public_subnet_cidr" {
+  description = "CIDR block for the public subnet in East"
   type        = string
   default     = "10.0.1.0/24"
 }
 
-# Defines the IP range for the second private subnet to ensure cross-AZ redundancy
-variable "private_subnet_2_cidr" {
-  description = "CIDR block for private subnet 2"
+variable "private_subnet_1_cidr" {
+  description = "CIDR block for the first private subnet in East"
   type        = string
   default     = "10.0.2.0/24"
 }
 
-# Defines the IP range for the public subnet
-variable "public_subnet_cidr" {
-  description = "CIDR block for public subnet"
+variable "private_subnet_2_cidr" {
+  description = "CIDR block for the second private subnet in East"
   type        = string
   default     = "10.0.3.0/24"
 }
 
-# Sets the administrative login name for the Aurora PostgreSQL engine
-variable "db_master_username" {
-  description = "Master username for the Aurora PostgreSQL cluster"
+# --- Security & Access ---
+# FIX: Added missing variable to clear "undeclared variable" validate error
+variable "management_ip" {
+  description = "The specific public IP address allowed to SSH into the bastion (e.g., 1.2.3.4/32)"
   type        = string
-  sensitive   = true
+
+  validation {
+    condition     = can(cidrnetmask(var.management_ip))
+    error_message = "The management_ip must be a valid CIDR block (e.g., x.x.x.x/32)."
+  }
 }
 
-# Sets the sensitive administrative password; marked as sensitive to prevent logging in the console
+variable "ssh_key_name" {
+  description = "Name of the SSH key pair for EC2 instances"
+  type        = string
+  default     = "jenna"
+}
+
+# --- Database Credentials ---
+variable "db_master_username" {
+  description = "Master username for Aurora database"
+  type        = string
+  default     = "marcellus"
+
+  validation {
+    condition     = length(var.db_master_username) >= 1 && length(var.db_master_username) <= 16
+    error_message = "Username must be between 1 and 16 characters."
+  }
+}
+
 variable "db_master_password" {
   description = "Master password for Aurora database"
   type        = string
   sensitive   = true
+
+  validation {
+    condition     = length(var.db_master_password) >= 8
+    error_message = "Password must be at least 8 characters long."
+  }
 }
 
-# --- Secondary Region Configuration (us-west-1) ---
-
-# References the specific security group protecting the database in the us-west-1 region
-variable "secondary_db_security_group_id" {
-  description = "Security group ID for the secondary Aurora cluster"
+# --- Secondary Region Variables (West) ---
+variable "secondary_vpc_id" {
+  description = "The existing VPC ID in us-west-1"
   type        = string
 }
 
-# References the first private subnet ID in the secondary region (us-west-1)
-variable "secondary_private_subnet_1_id" {
-  description = "Private subnet 1 ID for the secondary Aurora cluster"
+variable "secondary_vpc_cidr" {
+  description = "The CIDR block of the West VPC"
   type        = string
 }
 
-# References the second private subnet ID in the secondary region (us-west-1)
-variable "secondary_private_subnet_2_id" {
-  description = "Private subnet 2 ID for the secondary Aurora cluster"
-  type        = string
+variable "secondary_private_subnet_ids" {
+  description = "List of private subnet IDs in us-west-1 for the DB Subnet Group"
+  type        = list(string)
+
+  validation {
+    condition     = length(var.secondary_private_subnet_ids) >= 2
+    error_message = "At least 2 subnet IDs are required for Aurora DB subnet group."
+  }
 }
 
-# Note: 'secondary_db_subnet_group_name' has been deleted because 
-# it is now handled via direct resource reference in main.tf.
+variable "secondary_private_route_table_id" {
+  description = "The Route Table ID in us-west-1 that needs the return route to East"
+  type        = string
+}

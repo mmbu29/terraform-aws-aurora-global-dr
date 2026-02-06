@@ -1,9 +1,11 @@
-name: 'Terraform'
+name: "Terraform Aurora Global Deploy"
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ main ]
   pull_request:
+    branches: [ main ]
+  workflow_dispatch:
 
 permissions:
   id-token: write
@@ -11,48 +13,41 @@ permissions:
 
 jobs:
   terraform:
-    name: 'Terraform'
+    name: "Terraform Apply"
     runs-on: ubuntu-latest
 
     env:
-      AWS_REGION: us-east-1
-      AWS_DEFAULT_REGION: us-east-1
-
-      TF_VAR_db_master_password: ${{ secrets.DB_MASTER_PASSWORD }}
-      TF_VAR_primary_db_subnet_group_name: ${{ secrets.PRIMARY_DB_SUBNET_GROUP_NAME }}
-      TF_VAR_secondary_db_subnet_group_name: ${{ secrets.SECONDARY_DB_SUBNET_GROUP_NAME }}
-
-    defaults:
-      run:
-        shell: bash
+      AWS_REGION: "us-east-1"
+      TF_VAR_db_master_password: ${{ secrets.TF_VAR_db_master_password }}
 
     steps:
-      - name: Checkout
+      - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Configure AWS Credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: ${{ secrets.AWS_OIDC_ROLE_ARN }}
-          aws-region: us-east-1
+          role-to-assume: arn:aws:iam::590183777783:role/GitHubTerraformRole
+          aws-region: ${{ env.AWS_REGION }}
 
       - name: Setup Terraform
         uses: hashicorp/setup-terraform@v3
+
+      # NEW: Security Scanning Gate
+      - name: Run tfsec
+        uses: aquasecurity/tfsec-action@v1.0.0
         with:
-          terraform_version: 1.9.8
+          # This ensures we scan using the variables that will actually be deployed
+          additional_args: --tfvars-file terraform.tfvars
 
       - name: Terraform Init
         run: terraform init
 
-      - name: Terraform Validate
-        run: terraform validate
-
+      # FIXED: Added -var-file to ensure variables are loaded
       - name: Terraform Plan
-        run: terraform plan -input=false
+        run: terraform plan -input=false -var-file="terraform.tfvars"
 
+      # FIXED: Added -var-file here as well
       - name: Terraform Apply
-        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-        run: terraform apply -auto-approve -input=false
-
-
-        
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        run: terraform apply -auto-approve -input=false -var-file="terraform.tfvars"
